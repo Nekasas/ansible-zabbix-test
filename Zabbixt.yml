@@ -1,0 +1,48 @@
+---
+- hosts: all
+  tasks:
+    # install zabbix agent
+    - name: install zabbix
+      yum:
+        name: https://repo.zabbix.com/zabbix/3.4/rhel/7/x86_64/zabbix-agent-3.4.10-1.el7.x86_64.rpm
+        state: present
+
+    # enable and start zabbix agent
+    - name: enable and start zabbix
+      service:
+        name: zabbix-agent
+        enabled: yes
+        state: started
+
+    # configure zabbix config from template
+    - name: configure zabbix config file
+      template:
+        src: templates/zabbix.j2
+        dest: /etc/zabbix/zabbix_agentd.conf
+        backup: no
+      register: template
+
+    # configure firewalld for zabbix and TCP 80 and 443
+    - name: configure firewalld
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+      with_items:
+        - 443/tcp
+        - 80/tcp
+        - 10051/tcp
+        - 10050/tcp
+      register: firewall
+
+    # reload firewall
+    - name: reload service
+      command: firewall-cmd --reload
+      when: firewall.changed
+
+    # restart zabbix service
+    - name: restart zabbix
+      service:
+        name: zabbix-agent
+        state: restarted
+      when: template.changed
